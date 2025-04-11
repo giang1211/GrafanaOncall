@@ -8,7 +8,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./rules.yml:/etc/prometheus/rules.yml
     networks:
-      - guardian-net
+      - opensis_network
     ports:
       - '9090:9090'
 
@@ -16,7 +16,7 @@ services:
     image: prom/node-exporter
     container_name: node-exporter
     networks:
-      - guardian-net
+      - opensis_network
     ports:
       - '9100:9100'
 
@@ -26,7 +26,7 @@ services:
     volumes:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
     networks:
-      - guardian-net
+      - opensis_network
     ports:
       - '9093:9093'
 
@@ -52,10 +52,11 @@ services:
       - GF_PLUGIN_GRAFANA_ONCALL_APP_ONCALL_API_URL=http://oncall:9093
       - GF_AUTH_MANAGED_SERVICE_ACCOUNTS_ENABLED=true
     networks:
-      - guardian-net
+      - opensis_network
 
 networks:
-  guardian-net:
+  opensis_network:
+    external: true
 
 volumes:
   grafana-storage: {}

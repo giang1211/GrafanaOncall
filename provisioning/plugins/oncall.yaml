@@ -2,7 +2,4 @@ apps:
   - type: grafana-oncall-app
     name: OnCall
     enabled: true
-    config:
-      oncallApiUrl: http://oncall:8080
-      stackId: local
-    
+
