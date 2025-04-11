@@ -1,4 +1,18 @@
-version: '3.8'
+version: '3.9'
+
+x-environment: &oncall-environment
+  DATABASE_TYPE: sqlite3
+  BROKER_TYPE: redis
+  BASE_URL: http://engine:8080
+  SECRET_KEY: your_long_secret_key_here_that_is_over_32_characters
+  REDIS_URI: redis://redis:6379/0
+  DJANGO_SETTINGS_MODULE: settings.hobby
+  CELERY_WORKER_QUEUE: "default,critical,long,slack,telegram,webhook,retry,celery,grafana"
+  CELERY_WORKER_CONCURRENCY: "1"
+  CELERY_WORKER_MAX_TASKS_PER_CHILD: "100"
+  CELERY_WORKER_SHUTDOWN_INTERVAL: "65m"
+  CELERY_WORKER_BEAT_ENABLED: "True"
+  GRAFANA_API_URL: http://grafana:3000
 
 services:
   prometheus:
@@ -8,7 +22,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./rules.yml:/etc/prometheus/rules.yml
     networks:
-      - opensis_network
+      - grafana_network
     ports:
       - '9090:9090'
 
@@ -16,7 +30,7 @@ services:
     image: prom/node-exporter
     container_name: node-exporter
     networks:
-      - opensis_network
+      - grafana_network
     ports:
       - '9100:9100'
 
@@ -26,7 +40,7 @@ services:
     volumes:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
     networks:
-      - opensis_network
+      - grafana_network
     ports:
       - '9093:9093'
 
@@ -45,18 +59,78 @@ services:
       - GF_INSTALL_PLUGINS=grafana-oncall-app
       - GF_FEATURE_TOGGLES_ENABLE=oncall
       - GF_SERVER_ROOT_URL=http://grafana:3000
-      - GF_ONCALL_ALERTMANAGER_URL=http://alertmanager:9093
-      # - GF_INSTALL_PLUGINS="grafana-oncall-app vv1.9.0"
+      - GF_ONCALL_ALERTMANAGER_URL=http://alert-manager:9093
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-oncall-app
       - GF_PLUGIN_GRAFANA_ONCALL_APP_STACK_ID=local
-      - GF_PLUGIN_GRAFANA_ONCALL_APP_ONCALL_API_URL=http://oncall:9093
+      - GF_PLUGIN_GRAFANA_ONCALL_APP_ONCALL_API_URL=http://engine:8080
       - GF_AUTH_MANAGED_SERVICE_ACCOUNTS_ENABLED=true
     networks:
-      - opensis_network
+      - grafana_network
 
-networks:
-  opensis_network:
-    external: true
+  engine:
+    image: grafana/oncall
+    restart: always
+    ports:
+      - "8080:8080"
+    command: sh -c "uwsgi --ini uwsgi.ini"
+    environment: *oncall-environment
+    volumes:
+      - oncall_data:/var/lib/oncall
+    depends_on:
+      oncall_db_migration:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - grafana_network
+
+  celery:
+    image: grafana/oncall
+    restart: always
+    command: sh -c "./celery_with_exporter.sh"
+    environment: *oncall-environment
+    volumes:
+      - oncall_data:/var/lib/oncall
+    depends_on:
+      oncall_db_migration:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - grafana_network
+
+  oncall_db_migration:
+    image: grafana/oncall
+    command: python manage.py migrate --noinput
+    environment: *oncall-environment
+    volumes:
+      - oncall_data:/var/lib/oncall
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - grafana_network
+
+  redis:
+    image: redis:7.0.15
+    restart: always
+    expose:
+      - 6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      interval: 5s
+      retries: 10
+    networks:
+      - grafana_network
 
 volumes:
   grafana-storage: {}
+  oncall_data: {}
+  redis_data: {}
+
+networks:
+  grafana_network:
+    external: true

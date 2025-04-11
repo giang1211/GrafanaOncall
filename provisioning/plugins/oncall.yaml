@@ -1,5 +1,11 @@
+# apps:
+#   - type: grafana-oncall-app
+#     name: OnCall
+#     enabled: true
 apps:
   - type: grafana-oncall-app
     name: OnCall
     enabled: true
-
+    jsonData:
+      stackId: "my-oncall-stack"  # or any unique string
+      oncallAPIURL: "http://oncall:9093"
